@@ -1,3 +1,3 @@
-from .models import CodeDiff
+from .models import CodeDiff, AgentFinding
 
-__all__ = ["CodeDiff"]
+__all__ = ["CodeDiff", "AgentFinding"]

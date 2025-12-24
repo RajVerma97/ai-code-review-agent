@@ -1,2 +1,7 @@
+from src.clients import OllamaClient
+
+
 class CodeReviewService:
-    pass
+    def __init__(self, llm_client):
+        # self.llm_client =
+        pass
