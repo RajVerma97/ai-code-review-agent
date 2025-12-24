@@ -14,8 +14,6 @@ security_agent = SecurityAgent(llm_client=llm_client)
 
 @router.post("/review", response_model=List[AgentFinding])
 def review_code(code_diff: CodeDiff):
-    quality_agent_response = quality_agent.analyze(code_diff=code_diff, temperature=0.3)
-    security_agent_response = security_agent.analyze(
-        code_diff=code_diff, temperature=0.1
-    )
-    return security_agent_response
+    quality_agent_response = quality_agent.analyze(code_diff=code_diff)
+    security_agent_response = security_agent.analyze(code_diff=code_diff)
+    return quality_agent_response
