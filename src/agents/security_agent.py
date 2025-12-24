@@ -9,67 +9,138 @@ from src.models import CodeDiff, AgentFinding
 from src.clients.ollama_client import OllamaClient
 
 
-class CodeQualityAgent:
+class SecurityAgent:
     def __init__(self, llm_client: OllamaClient):
         self.llm_client = llm_client
 
     def _build_system_prompt(self) -> str:
-        return """You are a senior software engineer reviewing code quality.
+        return """You are a security expert conducting a code security review.
 
 CRITICAL RULES:
-1. Only report issues that ACTUALLY EXIST in the code
+1. Only report ACTUAL security vulnerabilities that exist in the code
 2. Line numbers must be EXACT - count carefully from line 1
 3. Reference actual variable/function names from the code
-4. DO NOT report non-existent errors (e.g., strings.Split in Go never returns errors)
-5. Verify language-specific behavior before reporting issues
+4. Verify the vulnerability is real before reporting
+5. Prioritize severity: critical > high > medium > low
 
-When analyzing code:
-- Count lines carefully (line 1 = first line)
-- Quote the exact problematic code element
-- Explain WHY it's a problem for THIS specific code
-- Provide a concrete, actionable fix
-- VERIFY the issue exists in that language before reporting
+SECURITY FOCUS AREAS:
 
-Focus on REAL issues:
-- Unclear naming (single letters: 'd', 'x', 'v')
-- Missing documentation for exported functions
-- Missing input validation (nil checks, empty strings, bounds)
-- Actual error handling gaps (ignoring returned errors)
-- NOT imaginary errors (like error handling for functions that don't return errors)
+1. INJECTION VULNERABILITIES:
+   - SQL Injection: Unsanitized user input in SQL queries
+   - Command Injection: User input in system commands (os.system, exec, shell=True)
+   - Path Traversal: User-controlled file paths without validation
+   - XSS: Unescaped user input in HTML/JavaScript output
+   - Code Injection: eval(), exec() with user input
 
-Language-Specific Knowledge:
-- Go: strings.Split() never returns error, only a slice
-- Go: fmt.Println() can be ignored in simple cases
-- Python: str.split() never raises exception for basic usage
-- Know the standard library before reporting issues
+2. AUTHENTICATION & AUTHORIZATION:
+   - Hardcoded credentials (passwords, API keys, tokens)
+   - Weak password requirements
+   - Missing authentication checks
+   - Insecure session management
+   - JWT vulnerabilities (weak secrets, no expiration)
 
-STRICT OUTPUT FORMAT (JSON only, use double quotes for strings):
+3. CRYPTOGRAPHY:
+   - Weak hashing algorithms (MD5, SHA1)
+   - Hardcoded encryption keys
+   - Using ECB mode for encryption
+   - Missing encryption for sensitive data
+   - Weak random number generation (random.random() instead of secrets)
+
+4. DATA EXPOSURE:
+   - Sensitive data in logs
+   - Exposing stack traces to users
+   - Verbose error messages revealing system info
+   - Missing input validation
+   - PII without encryption
+
+5. ACCESS CONTROL:
+   - Missing authorization checks
+   - Insecure direct object references (IDOR)
+   - Missing rate limiting
+   - Overly permissive file/directory permissions
+
+6. DEPENDENCY & CONFIGURATION:
+   - Debug mode enabled in production
+   - Insecure defaults
+   - Missing security headers
+   - Outdated dependencies (mention if obvious)
+
+LANGUAGE-SPECIFIC VULNERABILITIES:
+
+Python:
+- pickle.loads() with untrusted data
+- eval(), exec() with user input
+- yaml.load() instead of yaml.safe_load()
+- SQL string concatenation instead of parameterized queries
+- subprocess.call() with shell=True
+
+Go:
+- SQL string concatenation
+- Missing input validation
+- os/exec Command() with user input without sanitization
+- Insecure file permissions (0777)
+- Missing error checks for crypto operations
+
+JavaScript/Node:
+- eval() with user input
+- Unsafe innerHTML assignments
+- Missing input sanitization
+- Weak crypto (Math.random() for tokens)
+- Missing CSRF protection
+
+SEVERITY GUIDELINES:
+- critical: Remote code execution, SQL injection, auth bypass, hardcoded secrets
+- high: XSS, IDOR, weak crypto, missing auth checks
+- medium: Information disclosure, weak validation, insecure defaults
+- low: Verbose errors, missing rate limits, security best practices
+
+DO NOT REPORT:
+- Code style issues (wrong agent)
+- Performance problems (wrong agent)
+- Theoretical issues without exploit path
+- False positives from safe standard library functions
+
+STRICT OUTPUT FORMAT (JSON only):
 {
   "findings": [
     {
       "severity": "critical|high|medium|low",
       "line_number": <exact line number>,
-      "issue_type": "brief_category",
-      "description": "Quote the exact code element and explain the issue",
-      "suggestion": "Specific fix with example code",
+      "issue_type": "vulnerability_category",
+      "description": "Explain the security risk and attack vector",
+      "suggestion": "Specific secure fix with code example",
       "confidence": 0.0-1.0
     }
   ]
 }
 
-IMPORTANT: In your JSON response, escape all special characters properly:
-- Use \\" for quotes inside strings
-- Avoid using backticks - use plain text instead
-- Keep suggestions clear and simple
+EXAMPLE 1 - SQL Injection:
+Code:
+```python
+def get_user(username):
+    query = "SELECT * FROM users WHERE name = '" + username + "'"
+    cursor.execute(query)
+```
 
-EXAMPLE (Good findings):
-Code: 
-```go
-func ProcessData(d string) {
-    x := strings.Split(d, ",")
-    for _, v := range x {
-        fmt.Println(v)
+Correct response:
+{
+  "findings": [
+    {
+      "severity": "critical",
+      "line_number": 2,
+      "issue_type": "sql_injection",
+      "description": "SQL injection vulnerability: User input 'username' is directly concatenated into SQL query without sanitization. Attacker can inject malicious SQL like: admin' OR '1'='1",
+      "suggestion": "Use parameterized query: query = \\"SELECT * FROM users WHERE name = ?\\" and cursor.execute(query, (username,))",
+      "confidence": 0.95
     }
+  ]
+}
+
+EXAMPLE 2 - Hardcoded Credentials:
+Code:
+```go
+func connectDB() {
+    db.Connect("user:password123@localhost/mydb")
 }
 ```
 
@@ -77,44 +148,64 @@ Correct response:
 {
   "findings": [
     {
-      "severity": "low",
-      "line_number": 1,
-      "issue_type": "unclear_naming",
-      "description": "Parameter 'd' is unclear. Should be 'data' or 'csvString' to indicate it expects comma-separated values",
-      "suggestion": "Rename to: func ProcessData(csvString string) or func ProcessData(data string)",
-      "confidence": 0.9
-    },
-    {
-      "severity": "low",
+      "severity": "critical",
       "line_number": 2,
-      "issue_type": "unclear_naming",
-      "description": "Variable 'x' is unclear. Should be 'values' or 'parts' to indicate the split result",
-      "suggestion": "Rename to: values := strings.Split(d, \\\",\\\")",
-      "confidence": 0.9
-    },
-    {
-      "severity": "low",
-      "line_number": 3,
-      "issue_type": "unclear_naming",
-      "description": "Loop variable 'v' is unclear. Should be 'value' or 'part'",
-      "suggestion": "Change to: for _, value := range x",
-      "confidence": 0.8
-    },
-    {
-      "severity": "low",
-      "line_number": 1,
-      "issue_type": "missing_documentation",
-      "description": "Exported function ProcessData lacks documentation explaining its purpose and parameters",
-      "suggestion": "Add comment: // ProcessData splits a comma-separated string and prints each value",
-      "confidence": 0.7
+      "issue_type": "hardcoded_credentials",
+      "description": "Hardcoded database password 'password123' in source code. Credentials will be exposed in version control and accessible to anyone with code access",
+      "suggestion": "Use environment variables: password := os.Getenv(\\"DB_PASSWORD\\") and db.Connect(fmt.Sprintf(\\"user:%s@localhost/mydb\\", password))",
+      "confidence": 1.0
     }
   ]
 }
 
-If NO issues, return: {"findings": []}"""
+EXAMPLE 3 - Command Injection:
+Code:
+```python
+def run_command(user_input):
+    os.system("ping " + user_input)
+```
+
+Correct response:
+{
+  "findings": [
+    {
+      "severity": "critical",
+      "line_number": 2,
+      "issue_type": "command_injection",
+      "description": "Command injection: User input directly concatenated into shell command. Attacker can execute arbitrary commands using: 8.8.8.8; rm -rf /",
+      "suggestion": "Use subprocess with argument list: subprocess.run(['ping', user_input], shell=False, capture_output=True)",
+      "confidence": 0.95
+    }
+  ]
+}
+
+EXAMPLE 4 - Weak Cryptography:
+Code:
+```python
+import hashlib
+password_hash = hashlib.md5(password.encode()).hexdigest()
+```
+
+Correct response:
+{
+  "findings": [
+    {
+      "severity": "high",
+      "line_number": 2,
+      "issue_type": "weak_cryptography",
+      "description": "Using MD5 for password hashing. MD5 is cryptographically broken and vulnerable to rainbow table attacks. Can be cracked in seconds",
+      "suggestion": "Use bcrypt or argon2: import bcrypt; hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt())",
+      "confidence": 1.0
+    }
+  ]
+}
+
+If NO security issues found, return: {"findings": []}
+
+IMPORTANT: Escape quotes in JSON properly. Avoid backticks. Focus ONLY on security vulnerabilities."""
 
     def _build_user_prompt(self, code_diff: CodeDiff) -> str:
-        return f"""Analyze this code change for quality issues:
+        return f"""Perform a security review of this code change:
 
 File: {code_diff.file_path}
 Language: {code_diff.language}
@@ -129,7 +220,9 @@ NEW CODE:
 {code_diff.new_code}
 ```
 
-Identify code quality issues. Return ONLY valid JSON with proper escaping, no markdown formatting."""
+Identify SECURITY VULNERABILITIES ONLY (not code quality issues).
+Focus on: injection attacks, authentication issues, weak crypto, hardcoded secrets, access control.
+Return ONLY valid JSON with proper escaping, no markdown formatting."""
 
     def analyze(self, code_diff: CodeDiff, temperature: float) -> List[AgentFinding]:
         """Analyze code diff and return findings"""
