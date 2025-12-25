@@ -11,13 +11,8 @@ from .base_agent import BaseAgent
 
 
 class SecurityAgent(BaseAgent):
-    temperature = 0.1
-
     def _get_agent_name(self) -> str:
         return "security_agent"
-
-    def __init__(self, llm_client: OllamaClient):
-        self.llm_client = llm_client
 
     def _build_system_prompt(self) -> str:
         return """You are a security expert conducting a code security review.

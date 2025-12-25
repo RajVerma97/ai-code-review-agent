@@ -11,8 +11,6 @@ from .base_agent import BaseAgent
 
 
 class CodeQualityAgent(BaseAgent):
-    temperature = 0.3
-
     def _get_agent_name(self) -> str:
         return "quality_agent"
 

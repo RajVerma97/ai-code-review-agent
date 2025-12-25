@@ -5,16 +5,15 @@ import json
 import json
 import re
 from typing import List
-from src.models import CodeDiff, AgentFinding
+from src.models import CodeDiff, AgentFinding, AgentResponse, ReviewResult, AgentConfig
 from src.clients.ollama_client import OllamaClient
 from abc import abstractmethod, ABC
 
 
 class BaseAgent(ABC):
-    temperature: float
-
-    def __init__(self, llm_client: OllamaClient):
+    def __init__(self, llm_client: OllamaClient, agent_config: AgentConfig):
         self.llm_client = llm_client
+        self.config = agent_config
 
     @abstractmethod
     def _build_system_prompt(self) -> str:
@@ -28,21 +27,23 @@ class BaseAgent(ABC):
     def _get_agent_name(self) -> str:
         pass
 
-    def analyze(self, code_diff: CodeDiff) -> List[AgentFinding]:
+    def analyze(self, code_diff: CodeDiff) -> AgentResponse:
         """Analyze code diff and return findings"""
         print(
             "agent is ",
-            self._get_agent_name(),
+            self.config.agent_name,
             "temperature is ",
-            self.temperature,
+            self.config.temperature,
         )
         llm_response = self.llm_client.generate(
-            self._build_system_prompt(),
-            self._build_user_prompt(code_diff=code_diff),
-            temperature=self.temperature,
+            system_prompt=self._build_system_prompt(),
+            user_prompt=self._build_user_prompt(code_diff=code_diff),
+            temperature=self.config.temperature,
             max_tokens=1500,
         )
-        return self._parse_response(llm_output=llm_response)
+
+        findings = self._parse_response(llm_output=llm_response)
+        return AgentResponse(agent_name=self.config.agent_name, findings=findings)
 
     def _clean_json_string(self, text: str) -> str:
         """Clean and prepare JSON string for parsing"""
