@@ -1,8 +1,8 @@
 from src.clients import OllamaClient
 from src.models import AgentConfig, CodeDiff, AgentResponse
-from typing import List
+from typing import List, Dict
 from src.agents.registry import create_agent
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 import time
 from datetime import datetime
 
@@ -17,7 +17,9 @@ class OrchestratorService:
     def review_sequential(self, code_diff: CodeDiff) -> List[AgentResponse]:
         responses: List[AgentResponse] = []
         for agent_config in self.agent_configs:
-            agent_response =self._run_single_agent(agent_config=agent_config,code_diff=code_diff)
+            agent_response = self._run_single_agent(
+                agent_config=agent_config, code_diff=code_diff
+            )
             responses.append(agent_response)
         return responses
 
@@ -27,15 +29,18 @@ class OrchestratorService:
 
         # Create a thread pool
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            # Submit all agent tasks
-            future_to_agent = {
-                executor.submit(
-                    self._run_single_agent, agent_config, code_diff
-                ): agent_config
-                for agent_config in self.agent_configs
-            }
+            # Map each Future to its corresponding AgentConfig
+            future_to_agent: Dict[Future, AgentConfig] = {}
 
-            # Collect results as they complete
+            # Submit all  tasks to the worker thread
+            for agent_config in self.agent_configs:
+                # add the futurue to the future to agent map
+                future = executor.submit(
+                    self._run_single_agent, agent_config, code_diff
+                )
+                future_to_agent[future] = agent_config
+
+            # Process agent results as soon as they complete
             for future in as_completed(future_to_agent):
                 agent_config = future_to_agent[future]
                 try:
