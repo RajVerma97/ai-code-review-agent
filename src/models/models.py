@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import List
+from datetime import timedelta
 
 
 class AgentConfig(BaseModel):
@@ -20,6 +21,7 @@ class AgentFinding(BaseModel):
 class AgentResponse(BaseModel):
     agent_name: str
     findings: List[AgentFinding]
+    execution_time: float # seconds
 
 
 class ReviewResult(BaseModel):

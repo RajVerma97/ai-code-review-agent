@@ -8,6 +8,9 @@ from typing import List
 from src.models import CodeDiff, AgentFinding, AgentResponse, ReviewResult, AgentConfig
 from src.clients.ollama_client import OllamaClient
 from abc import abstractmethod, ABC
+import time
+from datetime import timedelta
+import math
 
 
 class BaseAgent(ABC):
@@ -28,6 +31,7 @@ class BaseAgent(ABC):
         pass
 
     def analyze(self, code_diff: CodeDiff) -> AgentResponse:
+        start_time = time.perf_counter()
         """Analyze code diff and return findings"""
         print(
             "agent is ",
@@ -43,7 +47,14 @@ class BaseAgent(ABC):
         )
 
         findings = self._parse_response(llm_output=llm_response)
-        return AgentResponse(agent_name=self.config.agent_name, findings=findings)
+        end_time = time.perf_counter()
+        duration = end_time - start_time
+        execution_time = round(duration, 2)
+        return AgentResponse(
+            agent_name=self.config.agent_name,
+            findings=findings,
+            execution_time=execution_time,
+        )
 
     def _clean_json_string(self, text: str) -> str:
         """Clean and prepare JSON string for parsing"""
